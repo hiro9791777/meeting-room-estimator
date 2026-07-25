@@ -6,7 +6,7 @@
 
 ログインしたユーザーは、作成した見積もりを保存し、あとから履歴一覧や詳細画面で確認できます。
 
-フロントエンドは React、認証とデータベースは Supabase を使用する想定です。
+フロントエンドは React、認証・データベース・画像ストレージは Supabase を使用する想定です。
 
 ### 対象機能
 
@@ -14,6 +14,7 @@
 - ログイン
 - ログアウト
 - 運営会社・施設・会議室の表示
+- 会議室画像の表示
 - 会議室の選択
 - 利用時間と人数の入力
 - 備品と飲み物の選択
@@ -43,18 +44,15 @@
 erDiagram
     COMPANIES ||--o{ FACILITIES : owns
     FACILITIES ||--o{ MEETING_ROOMS : has
-    PROFILES ||--o{ ESTIMATES : creates
+    AUTH_USERS ||--o{ ESTIMATES : creates
     MEETING_ROOMS ||--o{ ESTIMATES : selected_for
     ESTIMATES ||--o{ ESTIMATE_EQUIPMENTS : includes
     EQUIPMENTS ||--o{ ESTIMATE_EQUIPMENTS : selected_in
     ESTIMATES ||--o{ ESTIMATE_DRINKS : includes
     DRINKS ||--o{ ESTIMATE_DRINKS : selected_in
 
-    PROFILES {
+    AUTH_USERS {
         uuid id PK
-        string display_name
-        datetime created_at
-        datetime updated_at
     }
 
     COMPANIES {
@@ -85,6 +83,7 @@ erDiagram
         integer capacity
         integer hourly_rate
         text description
+        string image_path
         boolean is_active
         datetime created_at
         datetime updated_at
@@ -113,7 +112,6 @@ erDiagram
         bigint id PK
         uuid user_id FK
         bigint meeting_room_id FK
-        string title
         integer usage_hours
         integer number_of_people
         string company_name_snapshot
@@ -135,7 +133,6 @@ erDiagram
         integer quantity
         string equipment_name_snapshot
         integer unit_price
-        integer subtotal
         datetime created_at
         datetime updated_at
     }
@@ -147,7 +144,6 @@ erDiagram
         integer quantity
         string drink_name_snapshot
         integer unit_price
-        integer subtotal
         datetime created_at
         datetime updated_at
     }
@@ -159,7 +155,7 @@ erDiagram
 
 データは、大きく次の4つに分かれます。
 
-1. ユーザー情報
+1. 認証ユーザー（Supabase Auth）
 2. 会議室情報
 3. 料金項目
 4. 保存した見積もり
@@ -229,15 +225,15 @@ facilities 1 : N meeting_rooms
 
 `meeting_rooms.facility_id` に、どの施設の会議室かを保存します。
 
-### 4.3 profiles と estimates
+### 4.3 auth.users と estimates
 
 ```text
-profiles 1 : N estimates
+auth.users 1 : N estimates
 ```
 
 1人のユーザーは、複数の見積もりを保存できます。
 
-`estimates.user_id` に見積もりを作成したユーザーのIDを保存します。
+`estimates.user_id` に見積もりを作成したユーザーの `auth.users.id` を保存します。
 
 ### 4.4 meeting_rooms と estimates
 
@@ -273,26 +269,9 @@ estimates 1 : N estimate_equipments
 
 ## 5. 各テーブルの詳細
 
-## 5.1 profiles
+認証ユーザーは Supabase Auth の `auth.users` で管理するため、アプリ独自のユーザーテーブルは作成しません。
 
-Supabase Auth のユーザーに紐づくプロフィール情報を保存します。
-
-Supabase Auth の `auth.users` には、ログインに必要なメールアドレスや認証情報が保存されます。アプリ固有の表示名などは `profiles` に保存します。
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 主キー。`auth.users.id` と同じ値 |
-| display_name | string | アプリ上に表示する名前 |
-| created_at | datetime | 作成日時 |
-| updated_at | datetime | 更新日時 |
-
-### password を持たせない理由
-
-パスワードは Supabase Auth が安全に管理します。アプリ側の独自テーブルには保存しません。
-
----
-
-## 5.2 companies
+## 5.1 companies
 
 会議室を運営している会社を管理します。
 
@@ -311,7 +290,7 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 
 ---
 
-## 5.3 facilities
+## 5.2 facilities
 
 会社が運営する施設・拠点・店舗を管理します。
 
@@ -335,7 +314,7 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 
 ---
 
-## 5.4 meeting_rooms
+## 5.3 meeting_rooms
 
 実際にユーザーが選択する会議室を管理します。
 
@@ -347,6 +326,7 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 | capacity | integer | 定員 |
 | hourly_rate | integer | 1時間あたりの料金 |
 | description | text | 会議室の説明 |
+| image_path | string | Supabase Storage内の代表画像のパス。画像がない場合はNULL |
 | is_active | boolean | 画面に表示するか |
 | created_at | datetime | 作成日時 |
 | updated_at | datetime | 更新日時 |
@@ -361,9 +341,32 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 
 平日料金、休日料金、時間帯料金などは、今回の対象外です。
 
+### 会議室画像の保存方法
+
+画像本体はデータベースに保存せず、Supabase StorageのPublic bucketに保存します。会議室は一般公開する情報であり、ログインしていないユーザーにも画像を表示するためです。
+
+```text
+bucket名
+meeting-room-images
+
+画像の保存例
+meeting-rooms/10/main.webp
+
+meeting_rooms.image_path に保存する値
+meeting-rooms/10/main.webp
+```
+
+DBには公開URL全体ではなく、Storage内のパスだけを保存します。React側で `getPublicUrl(image_path)` を使用して表示用URLを取得します。パスだけを持つことで、プロジェクトURLや配信方法が変わった場合にもDBの値を変更せずに対応しやすくなります。
+
+Public bucketでも、アップロード・更新・削除まで誰でも可能になるわけではありません。今回は管理者画面を作らないため、画像はSupabase Dashboardなどの管理環境から登録し、一般ユーザーには読み取りだけを許可します。
+
+画像は見積もりの金額や内容を確定する情報ではないため、見積もり側には画像のスナップショットを保存しません。
+
+複数画像が必要になった場合は、将来 `meeting_room_images` テーブルを追加し、`meeting_room_id`、`image_path`、`display_order` などを管理します。今回の最低限機能では、`meeting_rooms.image_path` に代表画像1枚を保存する構成とします。
+
 ---
 
-## 5.5 equipments
+## 5.4 equipments
 
 選択できる備品を管理します。
 
@@ -393,7 +396,7 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 
 ---
 
-## 5.6 drinks
+## 5.5 drinks
 
 選択できる飲み物を管理します。
 
@@ -414,7 +417,7 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 
 ---
 
-## 5.7 estimates
+## 5.6 estimates
 
 保存した見積もりの中心となるテーブルです。
 
@@ -423,7 +426,6 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 | id | bigint | 主キー |
 | user_id | uuid | 作成したユーザーID |
 | meeting_room_id | bigint | 選択した会議室ID |
-| title | string | 見積もりタイトル |
 | usage_hours | integer | 利用時間 |
 | number_of_people | integer | 利用人数 |
 | company_name_snapshot | string | 保存時点の会社名 |
@@ -436,14 +438,6 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 | total_amount | integer | 見積もり総額 |
 | created_at | datetime | 作成日時 |
 | updated_at | datetime | 更新日時 |
-
-### 見積もりタイトルの例
-
-- 社内研修用
-- 8月セミナー見積もり
-- 面接会場候補
-
-タイトルは履歴一覧で見分けやすくするために持たせます。
 
 ### 利用日時を持たせない理由
 
@@ -464,7 +458,7 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 
 ---
 
-## 5.8 estimate_equipments
+## 5.7 estimate_equipments
 
 1件の見積もりで選択された備品を保存する中間テーブルです。
 
@@ -476,17 +470,14 @@ Supabase Auth の `auth.users` には、ログインに必要なメールアド�
 | quantity | integer | 数量 |
 | equipment_name_snapshot | string | 保存時点の備品名 |
 | unit_price | integer | 保存時点の単価 |
-| subtotal | integer | 備品ごとの小計 |
 | created_at | datetime | 作成日時 |
 | updated_at | datetime | 更新日時 |
 
-```text
-subtotal = unit_price × quantity
-```
+備品ごとの小計は `unit_price × quantity` で算出できるため、カラムとしては保存しません。
 
 ---
 
-## 5.9 estimate_drinks
+## 5.8 estimate_drinks
 
 1件の見積もりで選択された飲み物を保存する中間テーブルです。
 
@@ -498,13 +489,44 @@ subtotal = unit_price × quantity
 | quantity | integer | 数量 |
 | drink_name_snapshot | string | 保存時点の飲み物名 |
 | unit_price | integer | 保存時点の単価 |
-| subtotal | integer | 飲み物ごとの小計 |
 | created_at | datetime | 作成日時 |
 | updated_at | datetime | 更新日時 |
 
+飲み物ごとの小計は `unit_price × quantity` で算出できるため、カラムとしては保存しません。
+
 ---
 
-## 6. スナップショットを保存する理由
+## 6. 削除した項目と削除理由
+
+今回の最低限機能に必要かどうかと、既存カラムから計算できるかどうかを基準に、以下を削除しました。
+
+### profiles テーブル
+
+表示名などのアプリ独自のユーザー情報を使用しないため削除しました。
+
+新規登録・ログイン・ログアウトは Supabase Auth で実現でき、見積もりの所有者は `estimates.user_id` から `auth.users.id` を直接参照して管理できます。RLSも `auth.uid() = estimates.user_id` で設定できるため、`profiles` がなくてもユーザーごとの見積もり保存・取得に影響はありません。
+
+### estimates.title
+
+見積もりに任意のタイトルを付ける機能は、今回の最低限機能に含めないため削除しました。
+
+見積もり履歴は、保存時点の会議室名、作成日時、人数、利用時間、合計金額などで識別できます。
+
+### estimate_equipments.subtotal
+
+備品ごとの小計は、保存済みの `unit_price × quantity` で常に算出できるため削除しました。
+
+### estimate_drinks.subtotal
+
+飲み物ごとの小計も、保存済みの `unit_price × quantity` で常に算出できるため削除しました。
+
+`subtotal` のような計算可能な値を明細ごとに保存しないことで、単価や数量と小計が一致しない状態を防げます。
+
+なお、`equipment_title` というカラムは元の設計にはありません。該当する名称項目である `equipment_name_snapshot` は、次の理由から残しています。
+
+---
+
+## 7. スナップショットを保存する理由
 
 見積もりを作成したあとに、会議室名や料金が変更される可能性があります。
 
@@ -522,11 +544,31 @@ estimates.hourly_rate_snapshot
 = 見積もりを作った時点の料金
 ```
 
-これはデータの重複に見えますが、過去の見積もり内容を正しく維持するために必要な重複です。
+名称についても同様です。備品名が「モニター」から「大型モニター」に変更された場合、マスターの最新名称だけを参照すると、過去の見積もりの表示内容まで変わってしまいます。
+
+このため、次の値は保存時点の内容として残します。
+
+- `estimates.company_name_snapshot`
+- `estimates.facility_name_snapshot`
+- `estimates.meeting_room_name_snapshot`
+- `estimates.hourly_rate_snapshot`
+- `estimate_equipments.equipment_name_snapshot`
+- `estimate_equipments.unit_price`
+- `estimate_drinks.drink_name_snapshot`
+- `estimate_drinks.unit_price`
+
+スナップショットを残す主な理由は次のとおりです。
+
+- マスターの名称や料金が変更されても、過去の見積もりを作成時の内容で表示できる
+- 見積もりの金額を、作成時の単価に基づいて再現できる
+- マスターを非表示にしたあとも、見積もりの明細を確認できる
+- 詳細画面やPDF出力などで、保存時点の内容を一貫して使用できる
+
+スナップショットはマスターデータとの重複に見えますが、あとから再計算できる `subtotal` とは異なり、変更前の名称や単価は現在のマスターから復元できません。そのため、過去の見積もり内容を正しく維持するために必要なデータです。
 
 ---
 
-## 7. 料金計算の考え方
+## 8. 料金計算の考え方
 
 ### 部屋料金
 
@@ -538,14 +580,14 @@ room_fee = hourly_rate_snapshot × usage_hours
 
 ```text
 equipment_fee
-= estimate_equipments.subtotal の合計
+= estimate_equipments の (unit_price × quantity) の合計
 ```
 
 ### 飲み物料金
 
 ```text
 drink_fee
-= estimate_drinks.subtotal の合計
+= estimate_drinks の (unit_price × quantity) の合計
 ```
 
 ### 合計料金
@@ -565,7 +607,7 @@ React 側で入力内容に応じてリアルタイムに表示します。
 
 ---
 
-## 8. 主キーと外部キー
+## 9. 主キーと外部キー
 
 ### 主キー（PK）
 
@@ -591,7 +633,7 @@ facilities.company_id = companies.id
 
 ---
 
-## 9. 制約
+## 10. 制約
 
 DB側でも不正なデータが入らないように制約を設定します。
 
@@ -635,7 +677,7 @@ UNIQUE (estimate_id, drink_id)
 
 ---
 
-## 10. インデックス
+## 11. インデックス
 
 検索や結合を速くするため、よく使う外部キーカラムにインデックスを設定します。
 
@@ -652,36 +694,27 @@ UNIQUE (estimate_id, drink_id)
 
 ---
 
-## 11. Supabase Auth との関係
+## 12. Supabase Auth との関係
 
 Supabase Auth は、ログイン用ユーザーを `auth.users` に保存します。
 
-ER図では Supabase 管理領域を簡潔にするため `auth.users` を直接書かず、アプリ側の `profiles` を記載しています。
-
-実際の関係は次のイメージです。
+ER図の `AUTH_USERS` は、Supabase が管理する `auth.users` を表しています。アプリ独自の `profiles` テーブルは作成せず、見積もりから認証ユーザーを直接参照します。
 
 ```text
 auth.users
-   1
-   │
-   0..1
-profiles
    1
    │
    N
 estimates
 ```
 
-- `profiles.id` → `auth.users.id`
 - `estimates.user_id` → `auth.users.id`
 
-プロフィール情報が不要なら `profiles` は作らず、`estimates.user_id` から直接 `auth.users.id` を参照する構成も可能です。
-
-今回は表示名を持たせる可能性を考えて `profiles` を用意しています。
+表示名などのプロフィール情報を使用しないため、認証と見積もりの所有者管理はこの構成だけで実現できます。
 
 ---
 
-## 12. RLSの考え方
+## 13. RLSの考え方
 
 SupabaseをReactから直接利用する場合、Row Level Security（RLS）を設定します。
 
@@ -699,11 +732,16 @@ RLSは、行単位で「誰がどのデータを操作できるか」を制御�
 
 ただし、`is_active = true` のデータだけを画面に表示します。
 
+### 公開画像
+
+Supabase Storageの `meeting-room-images` bucketは、会議室画像を誰でも閲覧できるPublic bucketとします。
+
+画像のアップロード・更新・削除は一般ユーザーに許可せず、Supabase Dashboardなどの管理環境から行います。
+
 ### ユーザー固有データ
 
 以下は本人のデータだけ操作可能にします。
 
-- profiles
 - estimates
 - estimate_equipments
 - estimate_drinks
@@ -721,7 +759,7 @@ using (auth.uid() = user_id);
 
 ---
 
-## 13. 見積もり保存処理
+## 14. 見積もり保存処理
 
 見積もり保存は、概ね次の順序です。
 
@@ -740,7 +778,7 @@ using (auth.uid() = user_id);
 
 ---
 
-## 14. 削除時の考え方
+## 15. 削除時の考え方
 
 ### 見積もりを削除する場合
 
@@ -759,7 +797,7 @@ using (auth.uid() = user_id);
 
 ---
 
-## 15. 今回あえて作っていないテーブル
+## 16. 今回あえて作っていないテーブル
 
 ### reservations
 
@@ -789,7 +827,7 @@ using (auth.uid() = user_id);
 
 ---
 
-## 16. 今後の拡張例
+## 17. 今後の拡張例
 
 必要になった場合は、以下の拡張が可能です。
 
@@ -805,11 +843,12 @@ using (auth.uid() = user_id);
 
 ---
 
-## 17. この設計のポイント
+## 18. この設計のポイント
 
 1. 複数会社の会議室を扱えるよう、会社・施設・会議室を分けた
 2. 認証はSupabase Authに任せ、パスワードを独自管理しない
 3. 備品と飲み物は複数選択できるため中間テーブルを使った
 4. 過去の見積もりを維持するため、名称と単価のスナップショットを保存した
-5. 予約管理や決済には広げず、企画の最低限機能に絞った
-6. RLSを利用し、ユーザーが自分の見積もりだけ見られるようにする
+5. 会議室の代表画像はSupabase Storageに置き、DBには画像パスだけを保存する
+6. 予約管理や決済には広げず、企画の最低限機能に絞った
+7. RLSを利用し、ユーザーが自分の見積もりだけ見られるようにする
