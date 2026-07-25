@@ -13,6 +13,7 @@
 - 新規登録
 - ログイン
 - ログアウト
+- 表示名の登録・表示
 - 運営会社・施設・会議室の表示
 - 会議室画像の表示
 - 会議室の選択
@@ -44,6 +45,7 @@
 erDiagram
     COMPANIES ||--o{ FACILITIES : owns
     FACILITIES ||--o{ MEETING_ROOMS : has
+    AUTH_USERS ||--o| PROFILES : has
     AUTH_USERS ||--o{ ESTIMATES : creates
     MEETING_ROOMS ||--o{ ESTIMATES : selected_for
     ESTIMATES ||--o{ ESTIMATE_EQUIPMENTS : includes
@@ -53,6 +55,13 @@ erDiagram
 
     AUTH_USERS {
         uuid id PK
+    }
+
+    PROFILES {
+        uuid id PK, FK
+        string display_name
+        datetime created_at
+        datetime updated_at
     }
 
     COMPANIES {
@@ -161,7 +170,8 @@ erDiagram
 4. 保存した見積もり
 
 ```text
-ユーザー
+認証ユーザー
+  ├─ プロフィール
   └─ 見積もり
        ├─ 選択した会議室
        ├─ 選択した備品
@@ -225,7 +235,17 @@ facilities 1 : N meeting_rooms
 
 `meeting_rooms.facility_id` に、どの施設の会議室かを保存します。
 
-### 4.3 auth.users と estimates
+### 4.3 auth.users と profiles
+
+```text
+auth.users 1 : 0..1 profiles
+```
+
+1人の認証ユーザーは、0件または1件のプロフィールを持ちます。
+
+`profiles.id` には対応する `auth.users.id` と同じ値を保存します。
+
+### 4.4 auth.users と estimates
 
 ```text
 auth.users 1 : N estimates
@@ -235,7 +255,7 @@ auth.users 1 : N estimates
 
 `estimates.user_id` に見積もりを作成したユーザーの `auth.users.id` を保存します。
 
-### 4.4 meeting_rooms と estimates
+### 4.5 meeting_rooms と estimates
 
 ```text
 meeting_rooms 1 : N estimates
@@ -245,7 +265,7 @@ meeting_rooms 1 : N estimates
 
 ただし、1件の見積もりが選択する会議室は1つです。
 
-### 4.5 estimates と equipments
+### 4.6 estimates と equipments
 
 見積もりと備品は多対多の関係です。
 
@@ -259,7 +279,7 @@ estimates 1 : N estimate_equipments
  equipments 1 : N estimate_equipments
 ```
 
-### 4.6 estimates と drinks
+### 4.7 estimates と drinks
 
 見積もりと飲み物も多対多の関係です。
 
@@ -269,9 +289,24 @@ estimates 1 : N estimate_equipments
 
 ## 5. 各テーブルの詳細
 
-認証ユーザーは Supabase Auth の `auth.users` で管理するため、アプリ独自のユーザーテーブルは作成しません。
+認証情報は Supabase Auth の `auth.users` で管理し、アプリ独自の表示名は `profiles` で管理します。
 
-## 5.1 companies
+## 5.1 profiles
+
+Supabase Authのユーザーに紐づくプロフィール情報を保存します。
+
+| カラム | 型 | 内容 |
+|---|---|---|
+| id | uuid | 主キー。`auth.users.id` と同じ値 |
+| display_name | string | アプリ上に表示する名前 |
+| created_at | datetime | 作成日時 |
+| updated_at | datetime | 更新日時 |
+
+パスワードやメールアドレスなどの認証情報はSupabase Authが管理するため、`profiles` には保存しません。
+
+---
+
+## 5.2 companies
 
 会議室を運営している会社を管理します。
 
@@ -290,7 +325,7 @@ estimates 1 : N estimate_equipments
 
 ---
 
-## 5.2 facilities
+## 5.3 facilities
 
 会社が運営する施設・拠点・店舗を管理します。
 
@@ -314,7 +349,7 @@ estimates 1 : N estimate_equipments
 
 ---
 
-## 5.3 meeting_rooms
+## 5.4 meeting_rooms
 
 実際にユーザーが選択する会議室を管理します。
 
@@ -366,7 +401,7 @@ Public bucketでも、アップロード・更新・削除まで誰でも可能�
 
 ---
 
-## 5.4 equipments
+## 5.5 equipments
 
 選択できる備品を管理します。
 
@@ -396,7 +431,7 @@ Public bucketでも、アップロード・更新・削除まで誰でも可能�
 
 ---
 
-## 5.5 drinks
+## 5.6 drinks
 
 選択できる飲み物を管理します。
 
@@ -417,7 +452,7 @@ Public bucketでも、アップロード・更新・削除まで誰でも可能�
 
 ---
 
-## 5.6 estimates
+## 5.7 estimates
 
 保存した見積もりの中心となるテーブルです。
 
@@ -458,7 +493,7 @@ Public bucketでも、アップロード・更新・削除まで誰でも可能�
 
 ---
 
-## 5.7 estimate_equipments
+## 5.8 estimate_equipments
 
 1件の見積もりで選択された備品を保存する中間テーブルです。
 
@@ -477,7 +512,7 @@ Public bucketでも、アップロード・更新・削除まで誰でも可能�
 
 ---
 
-## 5.8 estimate_drinks
+## 5.9 estimate_drinks
 
 1件の見積もりで選択された飲み物を保存する中間テーブルです。
 
@@ -499,12 +534,6 @@ Public bucketでも、アップロード・更新・削除まで誰でも可能�
 ## 6. 削除した項目と削除理由
 
 今回の最低限機能に必要かどうかと、既存カラムから計算できるかどうかを基準に、以下を削除しました。
-
-### profiles テーブル
-
-表示名などのアプリ独自のユーザー情報を使用しないため削除しました。
-
-新規登録・ログイン・ログアウトは Supabase Auth で実現でき、見積もりの所有者は `estimates.user_id` から `auth.users.id` を直接参照して管理できます。RLSも `auth.uid() = estimates.user_id` で設定できるため、`profiles` がなくてもユーザーごとの見積もり保存・取得に影響はありません。
 
 ### estimates.title
 
@@ -698,19 +727,19 @@ UNIQUE (estimate_id, drink_id)
 
 Supabase Auth は、ログイン用ユーザーを `auth.users` に保存します。
 
-ER図の `AUTH_USERS` は、Supabase が管理する `auth.users` を表しています。アプリ独自の `profiles` テーブルは作成せず、見積もりから認証ユーザーを直接参照します。
+ER図の `AUTH_USERS` は、Supabaseが管理する `auth.users` を表しています。認証情報は `auth.users`、アプリで表示する名前は `profiles` に分けて保存します。
 
 ```text
 auth.users
    1
-   │
-   N
-estimates
+   ├── 0..1 profiles
+   └── N estimates
 ```
 
+- `profiles.id` → `auth.users.id`
 - `estimates.user_id` → `auth.users.id`
 
-表示名などのプロフィール情報を使用しないため、認証と見積もりの所有者管理はこの構成だけで実現できます。
+`profiles` が作成されていない状態でも認証や見積もりの所有者管理ができるように、`estimates.user_id` は `profiles.id` ではなく `auth.users.id` を直接参照します。
 
 ---
 
@@ -742,6 +771,7 @@ Supabase Storageの `meeting-room-images` bucketは、会議室画像を誰で�
 
 以下は本人のデータだけ操作可能にします。
 
+- profiles
 - estimates
 - estimate_equipments
 - estimate_drinks
@@ -847,8 +877,9 @@ using (auth.uid() = user_id);
 
 1. 複数会社の会議室を扱えるよう、会社・施設・会議室を分けた
 2. 認証はSupabase Authに任せ、パスワードを独自管理しない
-3. 備品と飲み物は複数選択できるため中間テーブルを使った
-4. 過去の見積もりを維持するため、名称と単価のスナップショットを保存した
-5. 会議室の代表画像はSupabase Storageに置き、DBには画像パスだけを保存する
-6. 予約管理や決済には広げず、企画の最低限機能に絞った
-7. RLSを利用し、ユーザーが自分の見積もりだけ見られるようにする
+3. アプリ独自の表示名は `profiles` に分けて保存する
+4. 備品と飲み物は複数選択できるため中間テーブルを使った
+5. 過去の見積もりを維持するため、名称と単価のスナップショットを保存した
+6. 会議室の代表画像はSupabase Storageに置き、DBには画像パスだけを保存する
+7. 予約管理や決済には広げず、企画の最低限機能に絞った
+8. RLSを利用し、ユーザーが自分のデータだけ見られるようにする
