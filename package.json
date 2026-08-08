@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "preview": "next start",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "db:setup": "for migration_file in supabase/migrations/*.sql; do prisma db execute --schema prisma/schema.prisma --file \"$migration_file\" || exit 1; done",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate"
   },
