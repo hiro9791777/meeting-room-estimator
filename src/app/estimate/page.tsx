@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { UsageHoursForm } from "@/components/usage-hours-form";
+import { EstimateForm } from "@/components/estimate-form";
+import { getActiveCatalogs } from "@/lib/catalog";
 import { getActiveRoom } from "@/lib/rooms";
 
 export const dynamic = "force-dynamic";
@@ -15,12 +16,19 @@ export default async function EstimatePage({
 
   if (!Number.isSafeInteger(roomId) || roomId < 1) redirect("/rooms");
 
-  const room = await getActiveRoom(roomId);
+  const [room, catalogs] = await Promise.all([
+    getActiveRoom(roomId),
+    getActiveCatalogs(),
+  ]);
   if (!room) redirect("/rooms");
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8 sm:py-16">
-      <UsageHoursForm room={room} />
+      <EstimateForm
+        drinks={catalogs.drinks}
+        equipments={catalogs.equipments}
+        room={room}
+      />
     </main>
   );
 }
