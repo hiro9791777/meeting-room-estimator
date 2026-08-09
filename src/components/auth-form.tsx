@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -16,7 +16,12 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const isSignup = mode === "signup";
+
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,6 +107,8 @@ export function AuthForm({ mode }: AuthFormProps) {
             表示名
           </label>
           <input
+            aria-describedby={error ? "auth-error" : undefined}
+            aria-invalid={Boolean(error)}
             autoComplete="name"
             className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 transition outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
             id="displayName"
@@ -119,6 +126,8 @@ export function AuthForm({ mode }: AuthFormProps) {
           メールアドレス
         </label>
         <input
+          aria-describedby={error ? "auth-error" : undefined}
+          aria-invalid={Boolean(error)}
           autoComplete="email"
           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 transition outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           id="email"
@@ -135,7 +144,10 @@ export function AuthForm({ mode }: AuthFormProps) {
           パスワード
         </label>
         <input
-          aria-describedby="password-hint"
+          aria-describedby={
+            error ? "password-hint auth-error" : "password-hint"
+          }
+          aria-invalid={Boolean(error)}
           autoComplete={isSignup ? "new-password" : "current-password"}
           className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 transition outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           id="password"
@@ -149,14 +161,23 @@ export function AuthForm({ mode }: AuthFormProps) {
         </p>
       </div>
 
-      <div aria-live="polite">
+      <div>
         {error && (
-          <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          <p
+            className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 outline-none"
+            id="auth-error"
+            ref={errorRef}
+            role="alert"
+            tabIndex={-1}
+          >
             {error}
           </p>
         )}
         {message && (
-          <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <p
+            className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+            role="status"
+          >
             {message}
           </p>
         )}

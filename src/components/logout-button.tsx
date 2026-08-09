@@ -18,7 +18,7 @@ export function LogoutButton() {
 
   return (
     <button
-      className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+      className="rounded-full border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 sm:px-4 sm:text-sm"
       disabled={isPending}
       onClick={handleLogout}
       type="button"

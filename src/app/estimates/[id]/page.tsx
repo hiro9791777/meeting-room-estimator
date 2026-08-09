@@ -24,14 +24,17 @@ function LineItems({ title, items }: { title: string; items: EstimateLine[] }) {
       ) : (
         <ul className="mt-4 divide-y divide-slate-200">
           {items.map((item) => (
-            <li className="grid grid-cols-[1fr_auto] gap-3 py-4" key={item.id}>
-              <div>
+            <li
+              className="grid min-w-0 gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto]"
+              key={item.id}
+            >
+              <div className="min-w-0">
                 <p className="font-bold text-slate-900">{item.name}</p>
                 <p className="mt-1 text-sm text-slate-500">
                   {yen.format(item.unitPrice)} × {item.quantity}
                 </p>
               </div>
-              <p className="font-bold text-slate-900">
+              <p className="font-bold break-words text-slate-900 sm:text-right">
                 {yen.format(item.unitPrice * item.quantity)}
               </p>
             </li>
@@ -63,8 +66,8 @@ export default async function EstimateDetailPage({
     <main className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
       {saved === "1" && (
         <p
-          aria-live="polite"
           className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-bold text-emerald-800"
+          role="status"
         >
           見積もりを保存しました。
         </p>

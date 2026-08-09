@@ -61,6 +61,12 @@ function SelectionList<T extends CatalogItem>({
         const selected = item.id in quantities;
         const inputId = `${kind}-${item.id}-quantity`;
         const invalid = selected && !validPositiveInteger(quantities[item.id]);
+        const chargeUnit =
+          "chargeUnit" in item
+            ? item.chargeUnit === "per_item"
+              ? " / 1個"
+              : " / 1回"
+            : " / 1本";
 
         return (
           <div
@@ -85,6 +91,7 @@ function SelectionList<T extends CatalogItem>({
                 </span>
                 <span className="mt-1 block text-sm text-slate-600">
                   {yen.format(item.unitPrice)}
+                  {chargeUnit}
                 </span>
               </span>
             </label>
@@ -293,8 +300,10 @@ export function EstimateForm({
           </div>
         </section>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-xl font-black text-slate-950">備品</h2>
+        <fieldset className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <legend className="px-1 text-xl font-black text-slate-950">
+            備品
+          </legend>
           <p className="mt-2 text-sm text-slate-600">
             必要な備品を選び、数量を入力してください。
           </p>
@@ -304,10 +313,12 @@ export function EstimateForm({
             quantities={equipmentQuantities}
             setQuantities={setEquipmentQuantities}
           />
-        </section>
+        </fieldset>
 
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-xl font-black text-slate-950">飲み物</h2>
+        <fieldset className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <legend className="px-1 text-xl font-black text-slate-950">
+            飲み物
+          </legend>
           <p className="mt-2 text-sm text-slate-600">
             必要な飲み物を選び、数量を入力してください。
           </p>
@@ -317,24 +328,24 @@ export function EstimateForm({
             quantities={drinkQuantities}
             setQuantities={setDrinkQuantities}
           />
-        </section>
+        </fieldset>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <Link
-            className="rounded-full border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            className="rounded-full border border-slate-300 px-5 py-3 text-center text-sm font-bold text-slate-700 hover:bg-slate-50"
             href="/rooms"
           >
             会議室を選び直す
           </Link>
           <button
-            className="rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-            disabled={!formValid || submitting}
+            className="rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:bg-slate-400"
+            disabled={submitting}
             type="submit"
           >
             {submitting ? "保存中…" : "見積もりを保存"}
           </button>
           {submitError && (
-            <p aria-live="assertive" className="w-full text-sm text-red-700">
+            <p className="w-full text-sm text-red-700" role="alert">
               {submitError}
             </p>
           )}
@@ -368,6 +379,7 @@ export function EstimateForm({
           </div>
         </dl>
         <dl
+          aria-atomic="true"
           aria-live="polite"
           className="mt-6 space-y-3 border-t border-slate-700 pt-6 text-sm"
         >

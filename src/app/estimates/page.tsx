@@ -38,7 +38,7 @@ export default async function EstimatesPage() {
           {estimates.map((estimate) => (
             <li key={estimate.id}>
               <Link
-                className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow-md sm:grid-cols-[1fr_auto] sm:items-center"
+                className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 href={`/estimates/${estimate.id}`}
               >
                 <div>
@@ -52,7 +52,7 @@ export default async function EstimatesPage() {
                     {estimate.usageHours}時間・{estimate.numberOfPeople}名
                   </p>
                 </div>
-                <p className="text-2xl font-black text-blue-700">
+                <p className="text-2xl font-black break-words text-blue-700 sm:text-right">
                   {yen.format(estimate.totalAmount)}
                 </p>
               </Link>
