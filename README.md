@@ -31,6 +31,9 @@ npm run dev
 | `npm run dev`             | 開発サーバーを起動                           |
 | `npm run build`           | 本番用にビルド                               |
 | `npm run preview`         | ビルド済みアプリを本番相当で起動             |
+| `npm run test`            | 単体テストを実行                             |
+| `npm run test:e2e`        | PlaywrightでE2Eテストを実行                  |
+| `npm run test:e2e:ui`     | PlaywrightのUIモードでE2Eテストを実行        |
 | `npm run lint`            | ESLintによる静的解析                         |
 | `npm run format`          | Prettierによる整形                           |
 | `npm run format:check`    | フォーマットを変更せず検査                   |
@@ -38,6 +41,13 @@ npm run dev
 | `npm run prisma:validate` | Prismaスキーマを検査                         |
 | `npm run db:setup`        | SupabaseへマイグレーションとSeedを順番に適用 |
 | `npm run storage:seed`    | Storage bucketとサンプル画像を同期           |
+
+E2Eテストはテスト専用のローカルSupabase互換サーバーを自動起動するため、実際のSupabaseプロジェクトやテストユーザー用の秘密情報を必要としません。macOSではインストール済みのGoogle Chromeを使用します。その他の環境では初回だけ次のコマンドでChromiumをインストールしてください。
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
 
 ## ディレクトリ
 
