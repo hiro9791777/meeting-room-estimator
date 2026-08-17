@@ -74,6 +74,22 @@ npm run storage:seed -- --linked
 
 ローカルSupabaseへ同期する場合は `--linked` の代わりに `--local` を指定します。アプリは `image_path` から Supabase の公開URLを生成して会議室一覧に表示します。
 
+### 管理者による画像アップロード
+
+管理者としてログインすると、ヘッダーの「画像管理」から会議室画像をアップロードできます。最初の管理者はSupabase DashboardのSQL Editorで設定します。
+
+```sql
+update public.profiles
+set is_admin = true
+where id = (
+  select id from auth.users where email = '管理者のメールアドレス'
+);
+```
+
+一般ユーザーはプロフィールから管理者へ自己昇格できず、Storageへのアップロード・更新・削除および会議室の画像パス更新は管理者だけに許可されます。
+
+初期管理者の設定後は、管理者としてログインし、ヘッダーの「ユーザー管理」から登録済みユーザーの管理者権限を付与・解除できます。管理者が0人にならないよう、最後の管理者は解除できません。
+
 ## SupabaseとPrismaの役割
 
 Supabaseは認証、PostgreSQLデータベース、会議室画像のStorageを提供します。ブラウザやServer ComponentsからSupabaseを利用できるよう、`src/lib/supabase` にクライアントを用意しています。

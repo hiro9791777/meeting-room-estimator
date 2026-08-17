@@ -23,6 +23,8 @@
 - 見積もり保存
 - 見積もり履歴一覧
 - 見積もり詳細表示
+- 管理者による会議室画像の登録・差し替え
+- 管理者によるユーザー権限管理
 
 ### 対象外の機能
 
@@ -30,7 +32,6 @@
 - 空き状況確認
 - 利用日時の予約管理
 - 決済
-- 管理者画面
 - 地図検索
 - レビュー
 - チャット
@@ -60,6 +61,7 @@ erDiagram
     PROFILES {
         uuid id PK, FK
         string display_name
+        boolean is_admin
         datetime created_at
         datetime updated_at
     }
@@ -299,10 +301,13 @@ Supabase Authのユーザーに紐づくプロフィール情報を保存しま�
 |---|---|---|
 | id | uuid | 主キー。`auth.users.id` と同じ値 |
 | display_name | string | アプリ上に表示する名前 |
+| is_admin | boolean | 管理者権限を持つか。初期値はfalse |
 | created_at | datetime | 作成日時 |
 | updated_at | datetime | 更新日時 |
 
-パスワードやメールアドレスなどの認証情報はSupabase Authが管理するため、`profiles` には保存しません。
+パスワードやメールアドレスなどの認証情報はSupabase Authが管理するため、`profiles` には保存しません。管理者は別テーブルに分けず、ユーザーと1対1の `profiles.is_admin` で判定します。
+
+一般ユーザーが自分で管理者へ昇格できないよう、本人が更新できるプロフィール列は `display_name` だけに制限します。`is_admin` の変更は、管理者専用のDatabase Function（RPC）を経由して行います。
 
 ---
 
@@ -385,15 +390,15 @@ bucket名
 meeting-room-images
 
 画像の保存例
-meeting-rooms/10/main.webp
+rooms/10/550e8400-e29b-41d4-a716-446655440000.webp
 
 meeting_rooms.image_path に保存する値
-meeting-rooms/10/main.webp
+rooms/10/550e8400-e29b-41d4-a716-446655440000.webp
 ```
 
 DBには公開URL全体ではなく、Storage内のパスだけを保存します。React側で `getPublicUrl(image_path)` を使用して表示用URLを取得します。パスだけを持つことで、プロジェクトURLや配信方法が変わった場合にもDBの値を変更せずに対応しやすくなります。
 
-Public bucketでも、アップロード・更新・削除まで誰でも可能になるわけではありません。今回は管理者画面を作らないため、画像はSupabase Dashboardなどの管理環境から登録し、一般ユーザーには読み取りだけを許可します。
+Public bucketでも、アップロード・更新・削除まで誰でも可能になるわけではありません。一般ユーザーには読み取りだけを許可し、`profiles.is_admin = true` の管理者だけがアプリの画像管理画面から画像を登録・更新・削除できます。会議室の `image_path` 更新も管理者専用RPCを経由します。
 
 画像は見積もりの金額や内容を確定する情報ではないため、見積もり側には画像のスナップショットを保存しません。
 
@@ -727,7 +732,7 @@ UNIQUE (estimate_id, drink_id)
 
 Supabase Auth は、ログイン用ユーザーを `auth.users` に保存します。
 
-ER図の `AUTH_USERS` は、Supabaseが管理する `auth.users` を表しています。認証情報は `auth.users`、アプリで表示する名前は `profiles` に分けて保存します。
+ER図の `AUTH_USERS` は、Supabaseが管理する `auth.users` を表しています。認証情報は `auth.users`、アプリで表示する名前と管理者フラグは `profiles` に分けて保存します。
 
 ```text
 auth.users
@@ -761,11 +766,13 @@ RLSは、行単位で「誰がどのデータを操作できるか」を制御�
 
 ただし、`is_active = true` のデータだけを画面に表示します。
 
+管理者の会議室画像管理画面では、管理者用の追加ポリシーにより非公開の会議室も参照できます。
+
 ### 公開画像
 
 Supabase Storageの `meeting-room-images` bucketは、会議室画像を誰でも閲覧できるPublic bucketとします。
 
-画像のアップロード・更新・削除は一般ユーザーに許可せず、Supabase Dashboardなどの管理環境から行います。
+画像のアップロード・更新・削除は一般ユーザーに許可せず、管理者だけに許可します。Storageのポリシーと `public.is_admin()` の両方で権限を検査し、画像パスは `public.set_meeting_room_image()` を通して更新します。
 
 ### ユーザー固有データ
 
@@ -775,6 +782,8 @@ Supabase Storageの `meeting-room-images` bucketは、会議室画像を誰で�
 - estimates
 - estimate_equipments
 - estimate_drinks
+
+`profiles` は本人が参照できますが、更新できる列は `display_name` のみです。管理者フラグの付与・解除は `public.set_user_admin()`、管理画面用ユーザー一覧の取得は `public.list_users_for_admin()` を使用し、どちらも関数内で管理者権限を再検査します。また、管理者が0人にならないよう最後の管理者は解除できません。
 
 ### estimates の例
 
@@ -843,7 +852,7 @@ using (auth.uid() = user_id);
 
 ### administrators
 
-管理者画面を作らないため作成しません。
+管理者専用テーブルは作成しません。認証ユーザーと1対1の `profiles.is_admin` で管理者権限を表し、管理者だけが会議室画像とユーザー権限を管理します。
 
 ### reviews
 
@@ -877,9 +886,9 @@ using (auth.uid() = user_id);
 
 1. 複数会社の会議室を扱えるよう、会社・施設・会議室を分けた
 2. 認証はSupabase Authに任せ、パスワードを独自管理しない
-3. アプリ独自の表示名は `profiles` に分けて保存する
+3. アプリ独自の表示名と管理者フラグは `profiles` に分けて保存する
 4. 備品と飲み物は複数選択できるため中間テーブルを使った
 5. 過去の見積もりを維持するため、名称と単価のスナップショットを保存した
 6. 会議室の代表画像はSupabase Storageに置き、DBには画像パスだけを保存する
 7. 予約管理や決済には広げず、企画の最低限機能に絞った
-8. RLSを利用し、ユーザーが自分のデータだけ見られるようにする
+8. RLSと管理者専用RPCを利用し、一般ユーザーと管理者の操作範囲を分ける
