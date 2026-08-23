@@ -5,6 +5,37 @@ const port = 54329;
 const usersByEmail = new Map();
 const usersByAccessToken = new Map();
 const usersByRefreshToken = new Map();
+const estimates = [];
+const estimateEquipments = [];
+const estimateDrinks = [];
+
+const meetingRooms = [
+  {
+    id: 1,
+    name: "Focus 6",
+    capacity: 6,
+    hourly_rate: 3200,
+    description: "少人数の打ち合わせに適した、自然光の入る会議室です。",
+    image_path: null,
+    facilities: {
+      name: "新宿駅前店",
+      prefecture: "東京都",
+      city: "新宿区",
+      address_line: "西新宿1-1-1",
+      companies: { name: "コネクトスペース" },
+    },
+  },
+];
+
+const equipments = [
+  { id: 1, name: "プロジェクター", unit_price: 2200, charge_unit: "per_use" },
+  { id: 2, name: "追加モニター", unit_price: 1500, charge_unit: "per_use" },
+];
+
+const drinks = [
+  { id: 1, name: "ミネラルウォーター", unit_price: 150 },
+  { id: 2, name: "コーヒー", unit_price: 250 },
+];
 
 function nowIso() {
   return new Date().toISOString();
@@ -33,6 +64,7 @@ function createUser(email, password, displayName) {
 }
 
 createUser("e2e@example.com", "correct-password", "E2Eユーザー");
+createUser("other@example.com", "correct-password", "別のE2Eユーザー");
 
 function encode(value) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -73,7 +105,7 @@ async function readJson(request) {
 function corsHeaders(request) {
   return {
     "access-control-allow-headers":
-      "authorization,apikey,content-type,x-client-info,x-supabase-api-version",
+      "accept-profile,authorization,apikey,content-profile,content-type,prefer,range,x-client-info,x-supabase-api-version",
     "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "access-control-allow-origin": request.headers.origin ?? "*",
     "access-control-expose-headers": "content-range,x-supabase-api-version",
@@ -98,6 +130,22 @@ function bearerToken(request) {
 function authenticatedUser(request) {
   const token = bearerToken(request);
   return token ? usersByAccessToken.get(token) : undefined;
+}
+
+function equalsFilter(url, column) {
+  const value = url.searchParams.get(column);
+  return value?.startsWith("eq.") ? value.slice(3) : null;
+}
+
+function selectedColumns(url, row) {
+  const select = url.searchParams.get("select");
+  if (!select) return row;
+  return Object.fromEntries(
+    select
+      .split(",")
+      .filter((column) => column in row)
+      .map((column) => [column, row[column]]),
+  );
 }
 
 const server = createServer(async (request, response) => {
@@ -219,7 +267,171 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/rest/v1/meeting_rooms") {
-    sendJson(request, response, 200, [], { "content-range": "0-0/0" });
+    sendJson(request, response, 200, meetingRooms, {
+      "content-range": `0-${meetingRooms.length - 1}/${meetingRooms.length}`,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/rest/v1/equipments") {
+    sendJson(request, response, 200, equipments);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/rest/v1/drinks") {
+    sendJson(request, response, 200, drinks);
+    return;
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/rest/v1/rpc/create_estimate"
+  ) {
+    const user = authenticatedUser(request);
+    if (!user) {
+      sendJson(request, response, 401, {
+        code: "42501",
+        message: "ログインが必要です",
+      });
+      return;
+    }
+
+    const body = await readJson(request);
+    const room = meetingRooms.find(
+      (candidate) => candidate.id === body.p_meeting_room_id,
+    );
+    if (!room) {
+      sendJson(request, response, 400, {
+        code: "22023",
+        message: "選択された会議室は利用できません",
+      });
+      return;
+    }
+
+    const equipmentSelections = body.p_equipments ?? [];
+    const drinkSelections = body.p_drinks ?? [];
+    const equipmentFee = equipmentSelections.reduce((total, selection) => {
+      const item = equipments.find(
+        (candidate) => candidate.id === selection.id,
+      );
+      return total + (item?.unit_price ?? 0) * selection.quantity;
+    }, 0);
+    const drinkFee = drinkSelections.reduce((total, selection) => {
+      const item = drinks.find((candidate) => candidate.id === selection.id);
+      return total + (item?.unit_price ?? 0) * selection.quantity;
+    }, 0);
+    const roomFee = room.hourly_rate * body.p_usage_hours;
+    const id = estimates.length + 1;
+    const createdAt = nowIso();
+
+    estimates.push({
+      id,
+      user_id: user.id,
+      created_at: createdAt,
+      company_name_snapshot: room.facilities.companies.name,
+      facility_name_snapshot: room.facilities.name,
+      meeting_room_name_snapshot: room.name,
+      hourly_rate_snapshot: room.hourly_rate,
+      usage_hours: body.p_usage_hours,
+      number_of_people: body.p_number_of_people,
+      room_fee: roomFee,
+      equipment_fee: equipmentFee,
+      drink_fee: drinkFee,
+      total_amount: roomFee + equipmentFee + drinkFee,
+    });
+    equipmentSelections.forEach((selection) => {
+      const item = equipments.find(
+        (candidate) => candidate.id === selection.id,
+      );
+      if (!item) return;
+      estimateEquipments.push({
+        id: estimateEquipments.length + 1,
+        estimate_id: id,
+        equipment_name_snapshot: item.name,
+        unit_price: item.unit_price,
+        quantity: selection.quantity,
+      });
+    });
+    drinkSelections.forEach((selection) => {
+      const item = drinks.find((candidate) => candidate.id === selection.id);
+      if (!item) return;
+      estimateDrinks.push({
+        id: estimateDrinks.length + 1,
+        estimate_id: id,
+        drink_name_snapshot: item.name,
+        unit_price: item.unit_price,
+        quantity: selection.quantity,
+      });
+    });
+
+    sendJson(request, response, 200, id);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/rest/v1/estimates") {
+    const user = authenticatedUser(request);
+    if (!user) {
+      sendJson(request, response, 401, {
+        code: "PGRST301",
+        message: "Invalid JWT",
+      });
+      return;
+    }
+
+    const requestedId = equalsFilter(url, "id");
+    const rows = estimates
+      .filter((estimate) => estimate.user_id === user.id)
+      .filter(
+        (estimate) =>
+          requestedId === null || estimate.id === Number(requestedId),
+      )
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .map((estimate) => selectedColumns(url, estimate));
+    const wantsObject = request.headers.accept?.includes(
+      "application/vnd.pgrst.object+json",
+    );
+    if (wantsObject && rows.length === 0) {
+      sendJson(request, response, 406, {
+        code: "PGRST116",
+        details: "The result contains 0 rows",
+        message: "JSON object requested, multiple (or no) rows returned",
+      });
+      return;
+    }
+    sendJson(request, response, 200, wantsObject ? rows[0] : rows);
+    return;
+  }
+
+  if (
+    request.method === "GET" &&
+    url.pathname === "/rest/v1/estimate_equipments"
+  ) {
+    const user = authenticatedUser(request);
+    const estimateId = Number(equalsFilter(url, "estimate_id"));
+    const ownsEstimate = estimates.some(
+      (estimate) => estimate.id === estimateId && estimate.user_id === user?.id,
+    );
+    const rows = ownsEstimate
+      ? estimateEquipments
+          .filter((item) => item.estimate_id === estimateId)
+          .map((item) => selectedColumns(url, item))
+      : [];
+    sendJson(request, response, 200, rows);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/rest/v1/estimate_drinks") {
+    const user = authenticatedUser(request);
+    const estimateId = Number(equalsFilter(url, "estimate_id"));
+    const ownsEstimate = estimates.some(
+      (estimate) => estimate.id === estimateId && estimate.user_id === user?.id,
+    );
+    const rows = ownsEstimate
+      ? estimateDrinks
+          .filter((item) => item.estimate_id === estimateId)
+          .map((item) => selectedColumns(url, item))
+      : [];
+    sendJson(request, response, 200, rows);
     return;
   }
 
