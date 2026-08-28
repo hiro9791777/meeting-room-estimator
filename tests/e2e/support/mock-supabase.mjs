@@ -402,6 +402,41 @@ const server = createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "DELETE" && url.pathname === "/rest/v1/estimates") {
+    const user = authenticatedUser(request);
+    if (!user) {
+      sendJson(request, response, 401, {
+        code: "PGRST301",
+        message: "Invalid JWT",
+      });
+      return;
+    }
+
+    const requestedId = Number(equalsFilter(url, "id"));
+    const estimateIndex = estimates.findIndex(
+      (estimate) => estimate.id === requestedId && estimate.user_id === user.id,
+    );
+    if (estimateIndex === -1) {
+      sendJson(request, response, 200, []);
+      return;
+    }
+
+    const [deletedEstimate] = estimates.splice(estimateIndex, 1);
+    for (let index = estimateEquipments.length - 1; index >= 0; index -= 1) {
+      if (estimateEquipments[index].estimate_id === requestedId) {
+        estimateEquipments.splice(index, 1);
+      }
+    }
+    for (let index = estimateDrinks.length - 1; index >= 0; index -= 1) {
+      if (estimateDrinks[index].estimate_id === requestedId) {
+        estimateDrinks.splice(index, 1);
+      }
+    }
+
+    sendJson(request, response, 200, [selectedColumns(url, deletedEstimate)]);
+    return;
+  }
+
   if (
     request.method === "GET" &&
     url.pathname === "/rest/v1/estimate_equipments"

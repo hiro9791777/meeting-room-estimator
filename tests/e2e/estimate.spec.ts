@@ -9,9 +9,11 @@ async function login(page: import("@playwright/test").Page, email: string) {
 }
 
 test.describe("見積もりフロー", () => {
-  test("料金計算、保存、履歴、詳細表示を確認し、他ユーザーには表示しない", async ({
+  test("料金計算、保存、履歴、詳細表示、物理削除を確認し、他ユーザーには表示しない", async ({
     page,
   }) => {
+    test.setTimeout(60_000);
+
     await login(page, "e2e@example.com");
 
     await page.getByRole("radio", { name: /Focus 6/ }).click();
@@ -58,5 +60,22 @@ test.describe("見積もりフロー", () => {
     await expect(
       page.getByRole("heading", { name: "Focus 6" }),
     ).not.toBeVisible();
+
+    await page.getByRole("button", { name: "ログアウト" }).click();
+    await login(page, "e2e@example.com");
+    await page.goto(estimateUrl);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page
+      .getByRole("button", { name: "Focus 6 の見積もりを削除" })
+      .click();
+    await expect(page).toHaveURL(/\/estimates\?deleted=1$/);
+    await expect(page.getByRole("status")).toHaveText(
+      "見積もりを完全に削除しました。",
+    );
+    await expect(
+      page.getByText("保存済みの見積もりはありません。"),
+    ).toBeVisible();
+    await page.goto(estimateUrl);
+    await expect(page.getByText("This page could not be found.")).toBeVisible();
   });
 });

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { DeleteEstimateButton } from "@/components/delete-estimate-button";
 import { getOwnEstimate } from "@/lib/estimates";
 import type { EstimateLine } from "@/lib/estimates";
 
@@ -88,9 +89,15 @@ export default async function EstimateDetailPage({
             {estimate.companyName} / {estimate.facilityName}
           </p>
         </div>
-        <p className="text-sm text-slate-500">
-          {dateTime.format(new Date(estimate.createdAt))}
-        </p>
+        <div className="flex flex-col items-start gap-3 sm:items-end">
+          <p className="text-sm text-slate-500">
+            {dateTime.format(new Date(estimate.createdAt))}
+          </p>
+          <DeleteEstimateButton
+            estimateId={estimate.id}
+            roomName={estimate.roomName}
+          />
+        </div>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">

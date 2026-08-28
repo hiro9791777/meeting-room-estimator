@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DeleteEstimateButton } from "@/components/delete-estimate-button";
 import { getOwnEstimateSummaries } from "@/lib/estimates";
 
 const yen = new Intl.NumberFormat("ja-JP", {
@@ -15,7 +16,12 @@ const dateTime = new Intl.DateTimeFormat("ja-JP", {
 
 export const dynamic = "force-dynamic";
 
-export default async function EstimatesPage() {
+export default async function EstimatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
+  const { deleted } = await searchParams;
   const estimates = await getOwnEstimateSummaries();
 
   return (
@@ -23,6 +29,14 @@ export default async function EstimatesPage() {
       <h1 className="text-3xl font-black tracking-tight text-slate-950">
         見積もり履歴
       </h1>
+      {deleted === "1" && (
+        <p
+          className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-bold text-emerald-800"
+          role="status"
+        >
+          見積もりを完全に削除しました。
+        </p>
+      )}
       {estimates.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-slate-600">
           <p>保存済みの見積もりはありません。</p>
@@ -36,9 +50,12 @@ export default async function EstimatesPage() {
       ) : (
         <ul className="mt-8 grid gap-4">
           {estimates.map((estimate) => (
-            <li key={estimate.id}>
+            <li
+              className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              key={estimate.id}
+            >
               <Link
-                className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow-md sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                className="grid min-w-0 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
                 href={`/estimates/${estimate.id}`}
               >
                 <div>
@@ -56,6 +73,12 @@ export default async function EstimatesPage() {
                   {yen.format(estimate.totalAmount)}
                 </p>
               </Link>
+              <div className="sm:border-l sm:border-slate-200 sm:pl-4">
+                <DeleteEstimateButton
+                  estimateId={estimate.id}
+                  roomName={estimate.roomName}
+                />
+              </div>
             </li>
           ))}
         </ul>
