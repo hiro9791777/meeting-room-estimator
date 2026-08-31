@@ -2,12 +2,14 @@
 
 貸し会議室の利用時間・人数・備品・飲み物から概算料金を計算し、見積もりを保存するアプリケーションです。
 
+公開デモ: <https://meeting-room-estimator.vercel.app/>
+
 ## 技術構成
 
 - Next.js（App Router）/ React / TypeScript
 - Tailwind CSS
 - Supabase（認証・PostgreSQL・Storage）
-- Prisma（Supabase PostgreSQLへの型安全なサーバーサイドアクセス）
+- Prisma CLI（SQL適用・スキーマ検査）
 
 ## セットアップ
 
@@ -16,7 +18,6 @@ Node.js 20.9以上を用意し、次のコマンドを実行します。
 ```bash
 cp .env.example .env.local
 npm install
-npm run prisma:generate
 npm run db:setup
 npm run storage:seed -- --linked
 npm run dev
@@ -37,7 +38,6 @@ npm run dev
 | `npm run lint`            | ESLintによる静的解析                         |
 | `npm run format`          | Prettierによる整形                           |
 | `npm run format:check`    | フォーマットを変更せず検査                   |
-| `npm run prisma:generate` | Prisma Clientを生成                          |
 | `npm run prisma:validate` | Prismaスキーマを検査                         |
 | `npm run db:setup`        | SupabaseへマイグレーションとSeedを順番に適用 |
 | `npm run storage:seed`    | Storage bucketとサンプル画像を同期           |
@@ -57,7 +57,7 @@ src/
   app/               画面・レイアウト（App Router）
   components/        共通UI（機能実装時に追加）
   features/          機能単位のコード（機能実装時に追加）
-  lib/                Prisma・Supabaseなどの共通処理
+  lib/                Supabaseなどの共通処理
 doc/                  設計資料
 supabase/migrations/  DB・RLS・トリガー・Seedの再現可能なSQL
 ```
@@ -115,8 +115,8 @@ where id = (
 
 一般ユーザーは有効なマスターデータの読み取りだけが可能です。登録・編集・有効化・無効化は、テーブル権限とRLSの両方で管理者だけに許可します。会議室の代表画像は引き続き「画像管理」から設定します。
 
-## SupabaseとPrismaの役割
+## SupabaseとPrisma CLIの役割
 
 Supabaseは認証、PostgreSQLデータベース、会議室画像のStorageを提供します。ブラウザやServer ComponentsからSupabaseを利用できるよう、`src/lib/supabase` にクライアントを用意しています。
 
-PrismaはNext.jsのサーバー側からSupabase PostgreSQLへアクセスするために使用します。`.env.local` の `DATABASE_URL` にはアプリ実行用のTransaction pooler、`DIRECT_URL` にはマイグレーション用の直接接続文字列を設定してください。ER図のモデル化とマイグレーションはDB実装タスクで行います。
+アプリケーションからのデータアクセスにはSupabase Clientを使用します。Prisma CLIは`supabase/migrations`のSQL適用とPrismaスキーマの検査にのみ使用します。`.env.local`の`DATABASE_URL`と`DIRECT_URL`には、対象のSupabase PostgreSQLへの接続文字列を設定してください。
