@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
 
 import { RoomImage } from "@/components/room-image";
+import { replaceRoomImage } from "@/lib/replace-room-image";
 import { createClient } from "@/lib/supabase/client";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -30,7 +31,7 @@ export function AdminRoomImageManager({ rooms }: AdminRoomImageManagerProps) {
   const [pendingRoomId, setPendingRoomId] = useState<number | null>(null);
   const [status, setStatus] = useState<{
     roomId: number;
-    type: "error" | "success";
+    type: "error" | "success" | "warning";
     text: string;
   } | null>(null);
 
@@ -72,54 +73,40 @@ export function AdminRoomImageManager({ rooms }: AdminRoomImageManagerProps) {
     }
 
     setPendingRoomId(room.id);
-    const supabase = createClient();
-    const imagePath = `rooms/${room.id}/${crypto.randomUUID()}.${extension}`;
-    const { error: uploadError } = await supabase.storage
-      .from("meeting-room-images")
-      .upload(imagePath, file, {
-        cacheControl: "3600",
-        contentType: file.type,
-        upsert: false,
-      });
+    try {
+      const imagePath = `rooms/${room.id}/${crypto.randomUUID()}.${extension}`;
+      const result = await replaceRoomImage(
+        createClient(),
+        room.id,
+        file,
+        imagePath,
+      );
+      if (result.error) {
+        setStatus({
+          roomId: room.id,
+          type: "error",
+          text: [result.error, result.warning].filter(Boolean).join(" "),
+        });
+        return;
+      }
 
-    if (uploadError) {
+      const input = fileInputs.current[room.id];
+      if (input) input.value = "";
+      setStatus({
+        roomId: room.id,
+        type: result.warning ? "warning" : "success",
+        text: result.warning ?? "画像を更新しました。",
+      });
+      router.refresh();
+    } catch {
       setStatus({
         roomId: room.id,
         type: "error",
-        text: `画像をアップロードできませんでした: ${uploadError.message}`,
+        text: "画像の更新中に通信エラーが発生しました。再読み込みして登録状態を確認してください。",
       });
+    } finally {
       setPendingRoomId(null);
-      return;
     }
-
-    const { error: updateError } = await supabase.rpc(
-      "set_meeting_room_image",
-      {
-        target_image_path: imagePath,
-        target_room_id: room.id,
-      },
-    );
-
-    if (updateError) {
-      await supabase.storage.from("meeting-room-images").remove([imagePath]);
-      setStatus({
-        roomId: room.id,
-        type: "error",
-        text: `画像を会議室へ登録できませんでした: ${updateError.message}`,
-      });
-      setPendingRoomId(null);
-      return;
-    }
-
-    const input = fileInputs.current[room.id];
-    if (input) input.value = "";
-    setStatus({
-      roomId: room.id,
-      type: "success",
-      text: "画像を更新しました。",
-    });
-    setPendingRoomId(null);
-    router.refresh();
   }
 
   return (
@@ -164,9 +151,11 @@ export function AdminRoomImageManager({ rooms }: AdminRoomImageManagerProps) {
                   className={`rounded-xl px-4 py-3 text-sm ${
                     status.type === "success"
                       ? "bg-emerald-50 text-emerald-800"
-                      : "bg-red-50 text-red-700"
+                      : status.type === "warning"
+                        ? "bg-amber-50 text-amber-800"
+                        : "bg-red-50 text-red-700"
                   }`}
-                  role={status.type === "error" ? "alert" : "status"}
+                  role={status.type === "success" ? "status" : "alert"}
                 >
                   {status.text}
                 </p>
