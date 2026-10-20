@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 
+import { getAuthRedirectPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const requestedNext = url.searchParams.get("next");
-  const next = requestedNext?.startsWith("/") ? requestedNext : "/rooms";
+  const next = getAuthRedirectPath(requestedNext);
 
   if (code) {
     const supabase = await createClient();
