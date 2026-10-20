@@ -57,3 +57,36 @@ test.describe("認証フロー", () => {
     await expect(page.getByRole("heading", { name: "ログイン" })).toBeVisible();
   });
 });
+
+test.describe("ログイン後の遷移先検証", () => {
+  for (const { next, expected } of [
+    { next: "//example.org/path", expected: "/rooms" },
+    { next: "/\\example.org/path", expected: "/rooms" },
+    { next: "/\n/example.org/path", expected: "/rooms" },
+    { next: "https://example.org/path", expected: "/rooms" },
+    { next: "/estimates?sort=new#list", expected: "/estimates?sort=new#list" },
+    { next: null, expected: "/rooms" },
+  ]) {
+    test(`next=${JSON.stringify(next)} → ${expected}`, async ({
+      page,
+      baseURL,
+    }) => {
+      const loginUrl = new URL("/login", baseURL);
+      if (next !== null) loginUrl.searchParams.set("next", next);
+      const externalRequests: string[] = [];
+      await page.route("https://example.org/**", async (route) => {
+        externalRequests.push(route.request().url());
+        await route.abort();
+      });
+      await page.goto(loginUrl.href);
+      await page.getByLabel("メールアドレス").fill("e2e@example.com");
+      await page.getByLabel("パスワード").fill("correct-password");
+      await page.getByRole("button", { name: "ログイン" }).click();
+      await expect(page).toHaveURL(new URL(expected, baseURL).href);
+      await expect(
+        page.getByRole("button", { name: "ログアウト" }),
+      ).toBeVisible();
+      expect(externalRequests).toEqual([]);
+    });
+  }
+});

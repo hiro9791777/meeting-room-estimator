@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import { getAuthRedirectPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/client";
 
 type AuthFormProps = {
@@ -92,7 +93,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     }
 
     const next = searchParams.get("next");
-    router.push(next?.startsWith("/") ? next : "/rooms");
+    router.push(getAuthRedirectPath(next));
     router.refresh();
   }
 
